@@ -13,38 +13,16 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- CUSTOM DARK THEME ----------------
-st.markdown("""
-<style>
-body { background-color: #0b0e11; }
-.main { background-color: #0b0e11; color: white; }
-h1, h2, h3 { color: #fcd535; }
-.stButton>button {
-    background-color: #fcd535;
-    color: black;
-    font-weight: bold;
-    border-radius: 8px;
-}
-.login-box {
-    background-color: #161a1e;
-    padding: 40px;
-    border-radius: 15px;
-    text-align: center;
-    box-shadow: 0 0 20px #fcd53533;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ---------------- DATABASE ----------------
+# ---------------- DATABASE SETUP ----------------
 conn = sqlite3.connect("expense_app.db", check_same_thread=False)
 c = conn.cursor()
 
 c.execute("""CREATE TABLE IF NOT EXISTS users(
-            username TEXT,
+            email TEXT PRIMARY KEY,
             password TEXT)""")
 
 c.execute("""CREATE TABLE IF NOT EXISTS expenses(
-            username TEXT,
+            email TEXT,
             date TEXT,
             category TEXT,
             amount REAL)""")
@@ -55,44 +33,102 @@ conn.commit()
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-# ---------------- LOGIN SYSTEM ----------------
+# ---------------- SESSION ----------------
 if "user" not in st.session_state:
     st.session_state.user = None
 
+# ---------------- LOGIN PAGE ----------------
 if st.session_state.user is None:
 
-    st.markdown("<div class='login-box'>", unsafe_allow_html=True)
-    st.title("🔐 Login / Register")
+    st.markdown("""
+    <style>
+    body {background-color: #f3f4f6;}
+    .login-container {
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        height:90vh;
+    }
+    .login-card {
+        background:white;
+        padding:40px;
+        border-radius:16px;
+        width:400px;
+        box-shadow:0 15px 40px rgba(0,0,0,0.15);
+    }
+    .login-title {
+        font-size:26px;
+        font-weight:bold;
+        margin-bottom:20px;
+        text-align:center;
+    }
+    .social-btn {
+        width:100%;
+        padding:10px;
+        border-radius:8px;
+        border:1px solid #ddd;
+        margin-bottom:10px;
+        background-color:white;
+        cursor:pointer;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-    option = st.radio("Select Option", ["Login", "Register"])
+    st.markdown("<div class='login-container'>", unsafe_allow_html=True)
+    st.markdown("<div class='login-card'>", unsafe_allow_html=True)
 
-    username = st.text_input("Username")
+    st.markdown("<div class='login-title'>🔐 Sign In</div>", unsafe_allow_html=True)
+
+    st.markdown("<button class='social-btn'>🌍 Continue with Google</button>", unsafe_allow_html=True)
+    st.markdown("<button class='social-btn'> Continue with Apple</button>", unsafe_allow_html=True)
+    st.markdown("<hr>OR", unsafe_allow_html=True)
+
+    email = st.text_input("Email address")
     password = st.text_input("Password", type="password")
 
-    if option == "Register":
-        if st.button("Create Account"):
-            hashed = hash_password(password)
-            c.execute("INSERT INTO users VALUES (?,?)", (username, hashed))
-            conn.commit()
-            st.success("✅ Account Created Successfully")
+    col1, col2 = st.columns(2)
 
-    if option == "Login":
+    with col1:
         if st.button("Login"):
             hashed = hash_password(password)
-            c.execute("SELECT * FROM users WHERE username=? AND password=?",
-                      (username, hashed))
-            data = c.fetchone()
-            if data:
-                st.session_state.user = username
+            c.execute("SELECT * FROM users WHERE email=? AND password=?",
+                      (email, hashed))
+            if c.fetchone():
+                st.session_state.user = email
                 st.success("✅ Login Successful")
                 st.rerun()
             else:
-                st.error("❌ Invalid Credentials")
+                st.error("Invalid credentials")
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    with col2:
+        if st.button("Register"):
+            hashed = hash_password(password)
+            try:
+                c.execute("INSERT INTO users VALUES (?,?)", (email, hashed))
+                conn.commit()
+                st.success("✅ Account Created! Now Login")
+            except:
+                st.error("User already exists")
+
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
 # ---------------- DASHBOARD ----------------
 else:
+
+    # -------- DARK THEME --------
+    st.markdown("""
+    <style>
+    body { background-color: #0b0e11; }
+    .main { background-color: #0b0e11; color: white; }
+    h1, h2, h3 { color: #fcd535; }
+    .metric-card {
+        background-color: #161a1e;
+        padding: 20px;
+        border-radius: 12px;
+        text-align: center;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     st.sidebar.success(f"Logged in as {st.session_state.user}")
 
@@ -102,7 +138,7 @@ else:
 
     st.title("💰 Smart Expense Tracker AI")
 
-    # -------- Add Expense --------
+    # -------- ADD EXPENSE --------
     st.sidebar.header("➕ Add Expense")
 
     date = st.sidebar.date_input("Date")
@@ -116,14 +152,15 @@ else:
         c.execute("INSERT INTO expenses VALUES (?,?,?,?)",
                   (st.session_state.user, str(date), category, amount))
         conn.commit()
-        st.sidebar.success("✅ Added Successfully")
+        st.sidebar.success("Added ✅")
         st.balloons()
         st.rerun()
 
-    # -------- Load User Data --------
+    # -------- LOAD USER DATA --------
     df = pd.read_sql_query(
-        f"SELECT * FROM expenses WHERE username='{st.session_state.user}'",
-        conn
+        "SELECT * FROM expenses WHERE email=?",
+        conn,
+        params=(st.session_state.user,)
     )
 
     if len(df) > 0:
@@ -134,14 +171,21 @@ else:
         monthly_summary = df.groupby("Month")["amount"].sum()
 
         total_spent = df["amount"].sum()
+        avg_spent = df["amount"].mean()
 
-        st.metric("Total Spent", f"💰 {total_spent:.2f}")
+        col1, col2 = st.columns(2)
 
-        # -------- Monthly Chart --------
+        with col1:
+            st.metric("💰 Total Spent", f"{total_spent:.2f}")
+
+        with col2:
+            st.metric("📊 Average Expense", f"{avg_spent:.2f}")
+
+        # -------- MONTHLY CHART --------
         monthly_df = monthly_summary.reset_index()
         monthly_df["Month"] = monthly_df["Month"].astype(str)
 
-        fig = px.bar(
+        fig_bar = px.bar(
             monthly_df,
             x="Month",
             y="amount",
@@ -149,18 +193,12 @@ else:
             color="amount"
         )
 
-        fig.update_layout(
-            paper_bgcolor="#0b0e11",
-            plot_bgcolor="#0b0e11",
-            font_color="white"
-        )
+        st.plotly_chart(fig_bar, use_container_width=True)
 
-        st.plotly_chart(fig, use_container_width=True)
-
-        # -------- Category Donut --------
+        # -------- CATEGORY DONUT --------
         category_summary = df.groupby("category")["amount"].sum().reset_index()
 
-        fig2 = px.pie(
+        fig_pie = px.pie(
             category_summary,
             names="category",
             values="amount",
@@ -168,9 +206,9 @@ else:
             template="plotly_dark"
         )
 
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig_pie, use_container_width=True)
 
-        # -------- AI Prediction --------
+        # -------- AI PREDICTION --------
         if len(monthly_summary) > 1:
 
             months = np.arange(len(monthly_summary)).reshape(-1, 1)
@@ -182,7 +220,7 @@ else:
             next_month = np.array([[len(monthly_summary)]])
             prediction = model.predict(next_month)
 
-            st.metric("Next Month Prediction", f"💰 {prediction[0]:.2f}")
+            st.metric("🤖 Next Month Prediction", f"{prediction[0]:.2f}")
 
     else:
-        st.info("No expenses yet.")
+        st.info("No expenses added yet.")
