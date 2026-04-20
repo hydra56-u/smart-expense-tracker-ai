@@ -13,19 +13,25 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- DATABASE SETUP ----------------
+# ---------------- DATABASE ----------------
 conn = sqlite3.connect("expense_app.db", check_same_thread=False)
 c = conn.cursor()
 
-c.execute("""CREATE TABLE IF NOT EXISTS users(
-            email TEXT PRIMARY KEY,
-            password TEXT)""")
+c.execute("""
+CREATE TABLE IF NOT EXISTS users(
+    email TEXT PRIMARY KEY,
+    password TEXT
+)
+""")
 
-c.execute("""CREATE TABLE IF NOT EXISTS expenses(
-            email TEXT,
-            date TEXT,
-            category TEXT,
-            amount REAL)""")
+c.execute("""
+CREATE TABLE IF NOT EXISTS expenses(
+    email TEXT,
+    date TEXT,
+    category TEXT,
+    amount REAL
+)
+""")
 
 conn.commit()
 
@@ -37,96 +43,56 @@ def hash_password(password):
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# ---------------- LOGIN PAGE ----------------
+# ================= LOGIN PAGE =================
 if st.session_state.user is None:
 
-    st.markdown("""
-    <style>
-    body {background-color: #f3f4f6;}
-    .login-container {
-        display:flex;
-        justify-content:center;
-        align-items:center;
-        height:90vh;
-    }
-    .login-card {
-        background:white;
-        padding:40px;
-        border-radius:16px;
-        width:400px;
-        box-shadow:0 15px 40px rgba(0,0,0,0.15);
-    }
-    .login-title {
-        font-size:26px;
-        font-weight:bold;
-        margin-bottom:20px;
-        text-align:center;
-    }
-    .social-btn {
-        width:100%;
-        padding:10px;
-        border-radius:8px;
-        border:1px solid #ddd;
-        margin-bottom:10px;
-        background-color:white;
-        cursor:pointer;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    st.title("🔐 Smart Expense Tracker Login")
 
-    st.markdown("<div class='login-container'>", unsafe_allow_html=True)
-    st.markdown("<div class='login-card'>", unsafe_allow_html=True)
-
-    st.markdown("<div class='login-title'>🔐 Sign In</div>", unsafe_allow_html=True)
-
-    st.markdown("<button class='social-btn'>🌍 Continue with Google</button>", unsafe_allow_html=True)
-    st.markdown("<button class='social-btn'> Continue with Apple</button>", unsafe_allow_html=True)
-    st.markdown("<hr>OR", unsafe_allow_html=True)
-
-    email = st.text_input("Email address")
+    email = st.text_input("Email")
     password = st.text_input("Password", type="password")
 
     col1, col2 = st.columns(2)
 
+    # -------- LOGIN --------
     with col1:
         if st.button("Login"):
             hashed = hash_password(password)
-            c.execute("SELECT * FROM users WHERE email=? AND password=?",
-                      (email, hashed))
-            if c.fetchone():
+            c.execute(
+                "SELECT * FROM users WHERE email=? AND password=?",
+                (email, hashed)
+            )
+            user = c.fetchone()
+
+            if user:
                 st.session_state.user = email
                 st.success("✅ Login Successful")
                 st.rerun()
             else:
-                st.error("Invalid credentials")
+                st.error("❌ Invalid email or password")
 
+    # -------- REGISTER --------
     with col2:
         if st.button("Register"):
             hashed = hash_password(password)
             try:
-                c.execute("INSERT INTO users VALUES (?,?)", (email, hashed))
+                c.execute(
+                    "INSERT INTO users (email, password) VALUES (?,?)",
+                    (email, hashed)
+                )
                 conn.commit()
-                st.success("✅ Account Created! Now Login")
+                st.success("✅ Account Created! Now Login.")
             except:
-                st.error("User already exists")
+                st.error("⚠️ User already exists")
 
-    st.markdown("</div></div>", unsafe_allow_html=True)
-
-# ---------------- DASHBOARD ----------------
+# ================= DASHBOARD =================
 else:
 
-    # -------- DARK THEME --------
+    # -------- DARK STYLE --------
     st.markdown("""
     <style>
     body { background-color: #0b0e11; }
     .main { background-color: #0b0e11; color: white; }
     h1, h2, h3 { color: #fcd535; }
-    .metric-card {
-        background-color: #161a1e;
-        padding: 20px;
-        border-radius: 12px;
-        text-align: center;
-    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -136,7 +102,7 @@ else:
         st.session_state.user = None
         st.rerun()
 
-    st.title("💰 Smart Expense Tracker AI")
+    st.title("💰 Smart Expense Tracker AI Dashboard")
 
     # -------- ADD EXPENSE --------
     st.sidebar.header("➕ Add Expense")
@@ -149,11 +115,12 @@ else:
     amount = st.sidebar.number_input("Amount", min_value=0.0)
 
     if st.sidebar.button("Add Expense"):
-        c.execute("INSERT INTO expenses VALUES (?,?,?,?)",
-                  (st.session_state.user, str(date), category, amount))
+        c.execute(
+            "INSERT INTO expenses VALUES (?,?,?,?)",
+            (st.session_state.user, str(date), category, amount)
+        )
         conn.commit()
-        st.sidebar.success("Added ✅")
-        st.balloons()
+        st.sidebar.success("✅ Expense Added")
         st.rerun()
 
     # -------- LOAD USER DATA --------
@@ -181,7 +148,7 @@ else:
         with col2:
             st.metric("📊 Average Expense", f"{avg_spent:.2f}")
 
-        # -------- MONTHLY CHART --------
+        # -------- MONTHLY BAR CHART --------
         monthly_df = monthly_summary.reset_index()
         monthly_df["Month"] = monthly_df["Month"].astype(str)
 
@@ -202,7 +169,7 @@ else:
             category_summary,
             names="category",
             values="amount",
-            hole=0.55,
+            hole=0.5,
             template="plotly_dark"
         )
 
