@@ -3,207 +3,152 @@ import pandas as pd
 import os
 import numpy as np
 import plotly.express as px
-from sklearn.linear_model import LinearRegression
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
-    page_title="Smart Expense Tracker Pro",
-    page_icon="💰",
+    page_title="Smart Expense Dashboard",
+    page_icon="💼",
     layout="wide"
 )
 
-# ---------------- CUSTOM THEME ----------------
+# ---------------- MODERN LIGHT THEME ----------------
 st.markdown("""
 <style>
-
-/* Background Gradient */
 body {
-    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+    background-color: #f5f7fa;
 }
-
-/* Main text */
 .main {
-    color: white;
+    background-color: #f5f7fa;
 }
-
-/* Headers */
-h1, h2, h3 {
-    color: #fcd535;
+.sidebar .sidebar-content {
+    background-color: white;
 }
-
-/* Sidebar */
-[data-testid="stSidebar"] {
-    background-color: #111827;
+.card {
+    background-color: white;
+    padding: 25px;
+    border-radius: 14px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
 }
-
-/* Buttons */
-.stButton>button {
-    background: linear-gradient(90deg, #fcd535, #0ecb81);
-    color: black;
+h1 {
+    color: #111827;
+}
+.metric-title {
+    color: #6b7280;
+    font-size: 14px;
+}
+.metric-value {
+    font-size: 24px;
     font-weight: bold;
-    border-radius: 10px;
-    border: none;
-    padding: 8px 16px;
-    transition: 0.3s;
+    color: #111827;
 }
-.stButton>button:hover {
-    transform: scale(1.05);
-    opacity: 0.9;
-}
-
-/* Metric Cards */
-.metric-card {
-    background: rgba(255,255,255,0.05);
-    backdrop-filter: blur(10px);
-    padding: 20px;
-    border-radius: 16px;
-    text-align: center;
-    border: 1px solid rgba(255,255,255,0.1);
-}
-
-/* Divider spacing */
-hr {
-    border: 1px solid rgba(255,255,255,0.1);
-}
-
 </style>
 """, unsafe_allow_html=True)
 
 FILE_NAME = "expenses.csv"
 
-st.title("💰 Smart Expense Tracker Pro")
-
-# ---------------- FILE SETUP ----------------
+# ---------------- LOAD FILE ----------------
 if not os.path.exists(FILE_NAME):
     df = pd.DataFrame(columns=["Date", "Category", "Amount"])
     df.to_csv(FILE_NAME, index=False)
 
 df = pd.read_csv(FILE_NAME)
 
+st.title("💼 Expense Dashboard")
+
 # ---------------- SIDEBAR ----------------
-st.sidebar.header("➕ Add Expense")
-
-date = st.sidebar.date_input("Date")
-category = st.sidebar.selectbox(
-    "Category",
-    ["Food", "Travel", "Bills", "Shopping", "Other"]
+st.sidebar.header("📂 Navigation")
+menu = st.sidebar.radio(
+    "Go to",
+    ["Dashboard", "Add Expense"]
 )
-amount = st.sidebar.number_input("Amount", min_value=0.0)
 
-if st.sidebar.button("Add Expense"):
-    new_data = pd.DataFrame(
-        [[date, category, amount]],
-        columns=["Date", "Category", "Amount"]
+if menu == "Add Expense":
+
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.subheader("➕ Add Expense")
+
+    date = st.date_input("Date")
+    category = st.selectbox(
+        "Category",
+        ["Food", "Travel", "Bills", "Shopping", "Other"]
     )
-    df = pd.concat([df, new_data], ignore_index=True)
-    df.to_csv(FILE_NAME, index=False)
-    st.sidebar.success("✅ Expense Added")
-    st.rerun()
+    amount = st.number_input("Amount", min_value=0.0)
 
-# ---------------- MAIN DASHBOARD ----------------
-if len(df) > 0:
+    if st.button("Save Expense"):
+        new_data = pd.DataFrame(
+            [[date, category, amount]],
+            columns=["Date", "Category", "Amount"]
+        )
+        df = pd.concat([df, new_data], ignore_index=True)
+        df.to_csv(FILE_NAME, index=False)
+        st.success("✅ Expense Saved")
 
-    df["Date"] = pd.to_datetime(df["Date"])
-    df["Month"] = df["Date"].dt.to_period("M")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    monthly_summary = df.groupby("Month")["Amount"].sum()
+# ---------------- DASHBOARD ----------------
+if menu == "Dashboard":
 
-    total_spent = df["Amount"].sum()
-    avg_spent = df["Amount"].mean()
-    max_spent = df["Amount"].max()
+    if len(df) > 0:
 
-    # -------- KPI CARDS --------
-    col1, col2, col3 = st.columns(3)
+        df["Date"] = pd.to_datetime(df["Date"])
+        df["Month"] = df["Date"].dt.to_period("M")
 
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card">
-        <h3>Total Spent</h3>
-        <h2 style='color:#0ecb81'>💰 {total_spent:.2f}</h2>
-        </div>
-        """, unsafe_allow_html=True)
+        total_spent = df["Amount"].sum()
+        avg_spent = df["Amount"].mean()
+        max_spent = df["Amount"].max()
 
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card">
-        <h3>Average Expense</h3>
-        <h2 style='color:#fcd535'>📊 {avg_spent:.2f}</h2>
-        </div>
-        """, unsafe_allow_html=True)
+        # -------- TOP METRIC CARDS --------
+        col1, col2, col3 = st.columns(3)
 
-    with col3:
-        st.markdown(f"""
-        <div class="metric-card">
-        <h3>Highest Expense</h3>
-        <h2 style='color:#f6465d'>🔥 {max_spent:.2f}</h2>
-        </div>
-        """, unsafe_allow_html=True)
+        with col1:
+            st.markdown(f"""
+            <div class="card">
+                <div class="metric-title">Total Expenses</div>
+                <div class="metric-value">₹ {total_spent:,.2f}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-    st.markdown("<hr>", unsafe_allow_html=True)
+        with col2:
+            st.markdown(f"""
+            <div class="card">
+                <div class="metric-title">Average Expense</div>
+                <div class="metric-value">₹ {avg_spent:,.2f}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-    # -------- MONTHLY CHART --------
-    monthly_df = monthly_summary.reset_index()
-    monthly_df["Month"] = monthly_df["Month"].astype(str)
+        with col3:
+            st.markdown(f"""
+            <div class="card">
+                <div class="metric-title">Highest Expense</div>
+                <div class="metric-value">₹ {max_spent:,.2f}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-    fig_bar = px.bar(
-        monthly_df,
-        x="Month",
-        y="Amount",
-        template="plotly_dark",
-        color="Amount",
-        color_continuous_scale=["#0ecb81", "#fcd535"]
-    )
+        st.markdown("<br>", unsafe_allow_html=True)
 
-    fig_bar.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font_color="white"
-    )
+        # -------- PIE CHART --------
+        category_summary = df.groupby("Category")["Amount"].sum().reset_index()
 
-    st.plotly_chart(fig_bar, use_container_width=True)
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.subheader("Expense Distribution")
 
-    # -------- CATEGORY DONUT --------
-    category_summary = df.groupby("Category")["Amount"].sum().reset_index()
-    total_amount = category_summary["Amount"].sum()
+        fig = px.pie(
+            category_summary,
+            names="Category",
+            values="Amount",
+            hole=0.55,
+            color_discrete_sequence=px.colors.sequential.Blues
+        )
 
-    fig_pie = px.pie(
-        category_summary,
-        names="Category",
-        values="Amount",
-        hole=0.6,
-        template="plotly_dark",
-        color_discrete_sequence=["#fcd535", "#0ecb81", "#3b82f6", "#f6465d", "#a855f7"]
-    )
+        fig.update_layout(
+            paper_bgcolor="white",
+            plot_bgcolor="white",
+            font_color="#111827"
+        )
 
-    fig_pie.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font_color="white",
-        annotations=[dict(
-            text=f"<b>💰 {total_amount:.0f}</b>",
-            x=0.5, y=0.5,
-            font_size=20,
-            showarrow=False,
-            font_color="white"
-        )]
-    )
+        st.plotly_chart(fig, use_container_width=True)
 
-    st.plotly_chart(fig_pie, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    # -------- AI PREDICTION --------
-    if len(monthly_summary) > 1:
-
-        months = np.arange(len(monthly_summary)).reshape(-1, 1)
-        expenses = monthly_summary.values
-
-        model = LinearRegression()
-        model.fit(months, expenses)
-
-        next_month = np.array([[len(monthly_summary)]])
-        prediction = model.predict(next_month)
-
-        st.markdown("<hr>", unsafe_allow_html=True)
-        st.metric("🤖 Next Month Prediction", f"{prediction[0]:.2f}")
-
-else:
-    st.info("No expenses added yet. Add from sidebar.")
+    else:
+        st.info("No expenses added yet.")
