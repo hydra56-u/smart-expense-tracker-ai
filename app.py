@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import numpy as np
-import matplotlib.pyplot as plt
+import plotly.express as px
 from sklearn.linear_model import LinearRegression
 
 # ---------------- PAGE CONFIG ----------------
@@ -12,19 +12,12 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- CUSTOM BINANCE STYLE CSS ----------------
+# ---------------- CUSTOM DARK BINANCE STYLE ----------------
 st.markdown("""
 <style>
-body {
-    background-color: #0b0e11;
-}
-.main {
-    background-color: #0b0e11;
-    color: white;
-}
-h1, h2, h3 {
-    color: #fcd535;
-}
+body { background-color: #0b0e11; }
+.main { background-color: #0b0e11; color: white; }
+h1, h2, h3 { color: #fcd535; }
 .stButton>button {
     background-color: #fcd535;
     color: black;
@@ -125,23 +118,70 @@ if len(df) > 0:
     # -------- CHARTS --------
     col4, col5 = st.columns(2)
 
+    # ----- Monthly Bar Chart (TradingView Style) -----
     with col4:
         st.subheader("📊 Monthly Trend")
-        st.bar_chart(monthly_summary)
 
+        monthly_df = monthly_summary.reset_index()
+        monthly_df["Month"] = monthly_df["Month"].astype(str)
+
+        fig_bar = px.bar(
+            monthly_df,
+            x="Month",
+            y="Amount",
+            template="plotly_dark",
+            color="Amount",
+            color_continuous_scale=["#0ecb81", "#f6465d"]
+        )
+
+        fig_bar.update_layout(
+            paper_bgcolor="#0b0e11",
+            plot_bgcolor="#0b0e11",
+            font_color="white"
+        )
+
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+    # ----- Donut Pie Chart -----
     with col5:
         st.subheader("📌 Category Distribution")
 
-        category_summary = df.groupby("Category")["Amount"].sum()
+        category_summary = df.groupby("Category")["Amount"].sum().reset_index()
+        total_amount = category_summary["Amount"].sum()
 
-        fig, ax = plt.subplots()
-        ax.pie(
+        fig_pie = px.pie(
             category_summary,
-            labels=category_summary.index,
-            autopct="%1.1f%%"
+            names="Category",
+            values="Amount",
+            hole=0.55,
+            template="plotly_dark"
         )
-        ax.set_facecolor("#0b0e11")
-        st.pyplot(fig)
+
+        fig_pie.update_traces(
+            textinfo="percent+label",
+            marker=dict(
+                colors=["#fcd535", "#f6465d", "#0ecb81", "#3b82f6", "#a855f7"],
+                line=dict(color="#0b0e11", width=2)
+            )
+        )
+
+        fig_pie.update_layout(
+            paper_bgcolor="#0b0e11",
+            plot_bgcolor="#0b0e11",
+            font_color="white",
+            annotations=[
+                dict(
+                    text=f"💰<br>{total_amount:.0f}",
+                    x=0.5,
+                    y=0.5,
+                    font_size=20,
+                    showarrow=False,
+                    font_color="white"
+                )
+            ]
+        )
+
+        st.plotly_chart(fig_pie, use_container_width=True)
 
     st.divider()
 
@@ -163,7 +203,7 @@ if len(df) > 0:
 
         st.metric("Predicted Next Month Expense", f"💰 {prediction[0]:.2f}")
         st.progress(min(int(score * 100), 100))
-        st.write(f"Model Confidence: {score:.2f}")
+        st.write(f"Model Confidence (R²): {score:.2f}")
 
         if prediction[0] > monthly_summary.mean():
             st.warning("⚠️ Possible Overspending Alert!")
