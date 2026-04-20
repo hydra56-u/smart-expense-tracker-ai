@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-import os
+import sqlite3
+import hashlib
 import numpy as np
 import plotly.express as px
 from sklearn.linear_model import LinearRegression
@@ -12,7 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- CUSTOM DARK BINANCE STYLE ----------------
+# ---------------- CUSTOM DARK THEME ----------------
 st.markdown("""
 <style>
 body { background-color: #0b0e11; }
@@ -24,199 +25,164 @@ h1, h2, h3 { color: #fcd535; }
     font-weight: bold;
     border-radius: 8px;
 }
-.stDownloadButton>button {
-    background-color: #fcd535;
-    color: black;
-    border-radius: 8px;
-}
-.metric-card {
+.login-box {
     background-color: #161a1e;
-    padding: 20px;
-    border-radius: 12px;
+    padding: 40px;
+    border-radius: 15px;
     text-align: center;
+    box-shadow: 0 0 20px #fcd53533;
 }
 </style>
 """, unsafe_allow_html=True)
 
-FILE_NAME = "expenses.csv"
+# ---------------- DATABASE ----------------
+conn = sqlite3.connect("expense_app.db", check_same_thread=False)
+c = conn.cursor()
 
-st.title("💰 Smart Expense Tracker AI Dashboard")
+c.execute("""CREATE TABLE IF NOT EXISTS users(
+            username TEXT,
+            password TEXT)""")
 
-# ---------------- SAFE FILE LOAD ----------------
-if not os.path.exists(FILE_NAME):
-    df = pd.DataFrame(columns=["Date", "Category", "Amount"])
-    df.to_csv(FILE_NAME, index=False)
+c.execute("""CREATE TABLE IF NOT EXISTS expenses(
+            username TEXT,
+            date TEXT,
+            category TEXT,
+            amount REAL)""")
 
-try:
-    df = pd.read_csv(FILE_NAME)
-except:
-    df = pd.DataFrame(columns=["Date", "Category", "Amount"])
-    df.to_csv(FILE_NAME, index=False)
+conn.commit()
 
-# ---------------- SIDEBAR ----------------
-st.sidebar.header("➕ Add Expense")
+# ---------------- PASSWORD HASH ----------------
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
-date = st.sidebar.date_input("Date")
-category = st.sidebar.selectbox(
-    "Category",
-    ["Food", "Travel", "Bills", "Shopping", "Other"]
-)
-amount = st.sidebar.number_input("Amount", min_value=0.0, step=50.0)
+# ---------------- LOGIN SYSTEM ----------------
+if "user" not in st.session_state:
+    st.session_state.user = None
 
-if st.sidebar.button("Add Expense"):
-    new_data = pd.DataFrame(
-        [[date, category, amount]],
-        columns=["Date", "Category", "Amount"]
+if st.session_state.user is None:
+
+    st.markdown("<div class='login-box'>", unsafe_allow_html=True)
+    st.title("🔐 Login / Register")
+
+    option = st.radio("Select Option", ["Login", "Register"])
+
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if option == "Register":
+        if st.button("Create Account"):
+            hashed = hash_password(password)
+            c.execute("INSERT INTO users VALUES (?,?)", (username, hashed))
+            conn.commit()
+            st.success("✅ Account Created Successfully")
+
+    if option == "Login":
+        if st.button("Login"):
+            hashed = hash_password(password)
+            c.execute("SELECT * FROM users WHERE username=? AND password=?",
+                      (username, hashed))
+            data = c.fetchone()
+            if data:
+                st.session_state.user = username
+                st.success("✅ Login Successful")
+                st.rerun()
+            else:
+                st.error("❌ Invalid Credentials")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ---------------- DASHBOARD ----------------
+else:
+
+    st.sidebar.success(f"Logged in as {st.session_state.user}")
+
+    if st.sidebar.button("Logout"):
+        st.session_state.user = None
+        st.rerun()
+
+    st.title("💰 Smart Expense Tracker AI")
+
+    # -------- Add Expense --------
+    st.sidebar.header("➕ Add Expense")
+
+    date = st.sidebar.date_input("Date")
+    category = st.sidebar.selectbox(
+        "Category",
+        ["Food", "Travel", "Bills", "Shopping", "Other"]
     )
-    df = pd.concat([df, new_data], ignore_index=True)
-    df.to_csv(FILE_NAME, index=False)
-    st.sidebar.success("✅ Added Successfully!")
-    st.balloons()
-    st.rerun()
+    amount = st.sidebar.number_input("Amount", min_value=0.0)
 
-# ---------------- MAIN DASHBOARD ----------------
-if len(df) > 0:
+    if st.sidebar.button("Add Expense"):
+        c.execute("INSERT INTO expenses VALUES (?,?,?,?)",
+                  (st.session_state.user, str(date), category, amount))
+        conn.commit()
+        st.sidebar.success("✅ Added Successfully")
+        st.balloons()
+        st.rerun()
 
-    df["Date"] = pd.to_datetime(df["Date"])
-    df["Month"] = df["Date"].dt.to_period("M")
+    # -------- Load User Data --------
+    df = pd.read_sql_query(
+        f"SELECT * FROM expenses WHERE username='{st.session_state.user}'",
+        conn
+    )
 
-    monthly_summary = df.groupby("Month")["Amount"].sum()
+    if len(df) > 0:
 
-    total_spent = df["Amount"].sum()
-    avg_spent = df["Amount"].mean()
-    max_spent = df["Amount"].max()
+        df["date"] = pd.to_datetime(df["date"])
+        df["Month"] = df["date"].dt.to_period("M")
 
-    # -------- KPI CARDS --------
-    col1, col2, col3 = st.columns(3)
+        monthly_summary = df.groupby("Month")["amount"].sum()
 
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card">
-        <h3>Total Spent</h3>
-        <h2>💰 {total_spent:.2f}</h2>
-        </div>
-        """, unsafe_allow_html=True)
+        total_spent = df["amount"].sum()
 
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card">
-        <h3>Average Expense</h3>
-        <h2>📊 {avg_spent:.2f}</h2>
-        </div>
-        """, unsafe_allow_html=True)
+        st.metric("Total Spent", f"💰 {total_spent:.2f}")
 
-    with col3:
-        st.markdown(f"""
-        <div class="metric-card">
-        <h3>Highest Expense</h3>
-        <h2>🔥 {max_spent:.2f}</h2>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.divider()
-
-    # -------- CHARTS --------
-    col4, col5 = st.columns(2)
-
-    # ----- Monthly Bar Chart (TradingView Style) -----
-    with col4:
-        st.subheader("📊 Monthly Trend")
-
+        # -------- Monthly Chart --------
         monthly_df = monthly_summary.reset_index()
         monthly_df["Month"] = monthly_df["Month"].astype(str)
 
-        fig_bar = px.bar(
+        fig = px.bar(
             monthly_df,
             x="Month",
-            y="Amount",
+            y="amount",
             template="plotly_dark",
-            color="Amount",
-            color_continuous_scale=["#0ecb81", "#f6465d"]
+            color="amount"
         )
 
-        fig_bar.update_layout(
+        fig.update_layout(
             paper_bgcolor="#0b0e11",
             plot_bgcolor="#0b0e11",
             font_color="white"
         )
 
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True)
 
-    # ----- Donut Pie Chart -----
-    with col5:
-        st.subheader("📌 Category Distribution")
+        # -------- Category Donut --------
+        category_summary = df.groupby("category")["amount"].sum().reset_index()
 
-        category_summary = df.groupby("Category")["Amount"].sum().reset_index()
-        total_amount = category_summary["Amount"].sum()
-
-        fig_pie = px.pie(
+        fig2 = px.pie(
             category_summary,
-            names="Category",
-            values="Amount",
+            names="category",
+            values="amount",
             hole=0.55,
             template="plotly_dark"
         )
 
-        fig_pie.update_traces(
-            textinfo="percent+label",
-            marker=dict(
-                colors=["#fcd535", "#f6465d", "#0ecb81", "#3b82f6", "#a855f7"],
-                line=dict(color="#0b0e11", width=2)
-            )
-        )
+        st.plotly_chart(fig2, use_container_width=True)
 
-        fig_pie.update_layout(
-            paper_bgcolor="#0b0e11",
-            plot_bgcolor="#0b0e11",
-            font_color="white",
-            annotations=[
-                dict(
-                    text=f"💰<br>{total_amount:.0f}",
-                    x=0.5,
-                    y=0.5,
-                    font_size=20,
-                    showarrow=False,
-                    font_color="white"
-                )
-            ]
-        )
+        # -------- AI Prediction --------
+        if len(monthly_summary) > 1:
 
-        st.plotly_chart(fig_pie, use_container_width=True)
+            months = np.arange(len(monthly_summary)).reshape(-1, 1)
+            expenses = monthly_summary.values
 
-    st.divider()
+            model = LinearRegression()
+            model.fit(months, expenses)
 
-    # -------- AI PREDICTION --------
-    if len(monthly_summary) > 1:
+            next_month = np.array([[len(monthly_summary)]])
+            prediction = model.predict(next_month)
 
-        st.subheader("🤖 AI Next Month Prediction")
+            st.metric("Next Month Prediction", f"💰 {prediction[0]:.2f}")
 
-        months = np.arange(len(monthly_summary)).reshape(-1, 1)
-        expenses = monthly_summary.values
-
-        model = LinearRegression()
-        model.fit(months, expenses)
-
-        next_month = np.array([[len(monthly_summary)]])
-        prediction = model.predict(next_month)
-
-        score = model.score(months, expenses)
-
-        st.metric("Predicted Next Month Expense", f"💰 {prediction[0]:.2f}")
-        st.progress(min(int(score * 100), 100))
-        st.write(f"Model Confidence (R²): {score:.2f}")
-
-        if prediction[0] > monthly_summary.mean():
-            st.warning("⚠️ Possible Overspending Alert!")
-
-    st.divider()
-
-    # -------- DOWNLOAD --------
-    st.download_button(
-        label="📥 Download Full Report",
-        data=df.to_csv(index=False),
-        file_name="expense_report.csv",
-        mime="text/csv"
-    )
-
-else:
-    st.info("No expenses added yet. Add from sidebar to begin.")
+    else:
+        st.info("No expenses yet.")
