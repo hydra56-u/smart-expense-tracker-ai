@@ -9,12 +9,45 @@ from sklearn.linear_model import LinearRegression
 st.set_page_config(
     page_title="Smart Expense Tracker AI",
     page_icon="💰",
-    layout="centered"
+    layout="wide"
 )
+
+# ---------------- CUSTOM BINANCE STYLE CSS ----------------
+st.markdown("""
+<style>
+body {
+    background-color: #0b0e11;
+}
+.main {
+    background-color: #0b0e11;
+    color: white;
+}
+h1, h2, h3 {
+    color: #fcd535;
+}
+.stButton>button {
+    background-color: #fcd535;
+    color: black;
+    font-weight: bold;
+    border-radius: 8px;
+}
+.stDownloadButton>button {
+    background-color: #fcd535;
+    color: black;
+    border-radius: 8px;
+}
+.metric-card {
+    background-color: #161a1e;
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+}
+</style>
+""", unsafe_allow_html=True)
 
 FILE_NAME = "expenses.csv"
 
-st.title("💰 Smart Expense Tracker + AI Predictor")
+st.title("💰 Smart Expense Tracker AI Dashboard")
 
 # ---------------- SAFE FILE LOAD ----------------
 if not os.path.exists(FILE_NAME):
@@ -27,37 +60,28 @@ except:
     df = pd.DataFrame(columns=["Date", "Category", "Amount"])
     df.to_csv(FILE_NAME, index=False)
 
-# ---------------- ADD EXPENSE ----------------
-st.subheader("➕ Add New Expense")
+# ---------------- SIDEBAR ----------------
+st.sidebar.header("➕ Add Expense")
 
-col1, col2 = st.columns(2)
+date = st.sidebar.date_input("Date")
+category = st.sidebar.selectbox(
+    "Category",
+    ["Food", "Travel", "Bills", "Shopping", "Other"]
+)
+amount = st.sidebar.number_input("Amount", min_value=0.0, step=50.0)
 
-with col1:
-    date = st.date_input("Select Date")
-
-with col2:
-    category = st.selectbox(
-        "Category",
-        ["Food", "Travel", "Bills", "Shopping", "Other"]
-    )
-
-amount = st.number_input("Amount", min_value=0.0, step=50.0)
-
-if st.button("Add Expense"):
+if st.sidebar.button("Add Expense"):
     new_data = pd.DataFrame(
         [[date, category, amount]],
         columns=["Date", "Category", "Amount"]
     )
     df = pd.concat([df, new_data], ignore_index=True)
     df.to_csv(FILE_NAME, index=False)
-    st.success("✅ Expense Added Successfully!")
+    st.sidebar.success("✅ Added Successfully!")
+    st.balloons()
     st.rerun()
 
-# ---------------- SHOW DATA ----------------
-st.subheader("📋 All Expenses")
-st.dataframe(df, use_container_width=True)
-
-# ---------------- ANALYSIS ----------------
+# ---------------- MAIN DASHBOARD ----------------
 if len(df) > 0:
 
     df["Date"] = pd.to_datetime(df["Date"])
@@ -65,47 +89,66 @@ if len(df) > 0:
 
     monthly_summary = df.groupby("Month")["Amount"].sum()
 
-    # ----- Monthly Chart -----
-    st.subheader("📊 Monthly Expense Summary")
-    st.bar_chart(monthly_summary)
+    total_spent = df["Amount"].sum()
+    avg_spent = df["Amount"].mean()
+    max_spent = df["Amount"].max()
 
-    # ----- Category Pie Chart -----
-    st.subheader("📌 Expense Distribution by Category")
+    # -------- KPI CARDS --------
+    col1, col2, col3 = st.columns(3)
 
-    category_summary = df.groupby("Category")["Amount"].sum()
+    with col1:
+        st.markdown(f"""
+        <div class="metric-card">
+        <h3>Total Spent</h3>
+        <h2>💰 {total_spent:.2f}</h2>
+        </div>
+        """, unsafe_allow_html=True)
 
-    fig, ax = plt.subplots()
-    ax.pie(
-        category_summary,
-        labels=category_summary.index,
-        autopct="%1.1f%%"
-    )
-    ax.set_title("Expenses by Category")
+    with col2:
+        st.markdown(f"""
+        <div class="metric-card">
+        <h3>Average Expense</h3>
+        <h2>📊 {avg_spent:.2f}</h2>
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.pyplot(fig)
+    with col3:
+        st.markdown(f"""
+        <div class="metric-card">
+        <h3>Highest Expense</h3>
+        <h2>🔥 {max_spent:.2f}</h2>
+        </div>
+        """, unsafe_allow_html=True)
 
-    # ----- Budget System -----
-    st.subheader("🎯 Set Monthly Budget")
+    st.divider()
 
-    budget = st.number_input(
-        "Enter Your Monthly Budget",
-        min_value=0.0
-    )
+    # -------- CHARTS --------
+    col4, col5 = st.columns(2)
 
-    if budget > 0:
-        current_month_expense = monthly_summary.iloc[-1]
+    with col4:
+        st.subheader("📊 Monthly Trend")
+        st.bar_chart(monthly_summary)
 
-        st.write(f"Current Month Spending: 💰 {current_month_expense:.2f}")
+    with col5:
+        st.subheader("📌 Category Distribution")
 
-        if current_month_expense > budget:
-            st.error("🚨 You have exceeded your budget!")
-        else:
-            st.success("✅ You are within your budget.")
+        category_summary = df.groupby("Category")["Amount"].sum()
 
-    # ----- AI Prediction -----
+        fig, ax = plt.subplots()
+        ax.pie(
+            category_summary,
+            labels=category_summary.index,
+            autopct="%1.1f%%"
+        )
+        ax.set_facecolor("#0b0e11")
+        st.pyplot(fig)
+
+    st.divider()
+
+    # -------- AI PREDICTION --------
     if len(monthly_summary) > 1:
 
-        st.subheader("🤖 AI Next Month Spending Prediction")
+        st.subheader("🤖 AI Next Month Prediction")
 
         months = np.arange(len(monthly_summary)).reshape(-1, 1)
         expenses = monthly_summary.values
@@ -116,20 +159,24 @@ if len(df) > 0:
         next_month = np.array([[len(monthly_summary)]])
         prediction = model.predict(next_month)
 
-        st.write(f"🔮 Predicted Next Month Expense: 💰 {prediction[0]:.2f}")
-
         score = model.score(months, expenses)
-        st.write(f"📈 Model Accuracy (R² Score): {score:.2f}")
+
+        st.metric("Predicted Next Month Expense", f"💰 {prediction[0]:.2f}")
+        st.progress(min(int(score * 100), 100))
+        st.write(f"Model Confidence: {score:.2f}")
 
         if prediction[0] > monthly_summary.mean():
-            st.warning("⚠️ Warning: You may overspend next month!")
+            st.warning("⚠️ Possible Overspending Alert!")
 
-    # ----- Download Report -----
-    st.subheader("📥 Download Report")
+    st.divider()
 
+    # -------- DOWNLOAD --------
     st.download_button(
-        label="Download Expenses as CSV",
+        label="📥 Download Full Report",
         data=df.to_csv(index=False),
         file_name="expense_report.csv",
         mime="text/csv"
     )
+
+else:
+    st.info("No expenses added yet. Add from sidebar to begin.")
